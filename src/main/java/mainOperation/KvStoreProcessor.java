@@ -4,6 +4,9 @@ import cn.helium.kvstore.common.KvStoreConfig;
 import cn.helium.kvstore.processor.Processor;
 import cn.helium.kvstore.rpc.RpcServer;
 import cn.helium.kvstore.rpc.RpcClientFactory;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 import hdfsOperation.HdfsOperation;
 import org.apache.avro.data.Json;
@@ -12,6 +15,7 @@ import org.mortbay.util.ajax.JSON;
 
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +59,7 @@ public class KvStoreProcessor implements Processor {
                 //判断内存中是否有key，当内存中没有key时，到磁盘中寻找
                 if (!store.containsKey(keyformat)) {
                     //判断disk上是否有key
-                    loadfromDisk2Store();
+                    loadfromDiskAllFile2Store();
                     //如果当前磁盘不包含Key，则查询其他kvpod磁盘
                     if (!store.containsKey(keyformat)) {
                     	/*判断其他kvPod节点上是否有key
@@ -101,7 +105,7 @@ public class KvStoreProcessor implements Processor {
 //                            save2log("cannot find the key!");
 //                            return null;
 //                        }
-                    	return null; //此中hdfs尚未写完整，所以先返回一个null
+                   	return null; //此中hdfs尚未写完整，所以先返回一个null
                     
                     }
                     else { //当前Kvpod上存在key
@@ -129,20 +133,20 @@ public class KvStoreProcessor implements Processor {
   
 	@Override
     public synchronized boolean put(String key,Map<String,String> value){
-        if(value == null){
+		if(value == null||key == null){
             return false;
         }
         //首先json化输入数据
         String inputformat = String.format("%s%s",key,JSON.toString(value));
        
+        //将数据放入store中
+        store.put(key,value);
+        
         //将数据存入本地文件中
         savefile2local(inputformat);
         
-        //将数据放入store中
-        store.put(key,value);
-  
         //将数据写入hdfs中
-        save2hdfs(inputformat);
+//        save2hdfs(inputformat);
         return true;
 
 
@@ -211,9 +215,19 @@ public class KvStoreProcessor implements Processor {
             e.printStackTrace();
         }
     }
-    public static  void loadfromDisk2Store(){
+    public static void putMap2Map(Map<String,Map<String,String>> t1,Map<String,Map<String,String>> t2) {
+    	for(String key:t1.keySet()) {
+    	   Map<String,String> value = t1.get(key);
+    	   t2.put(key, value);
+    	}
+    }
+    
+    /*
+     * 读取一个文件到store
+     */   
+    public static void loadDiskfile2Store(String localfilepath) {
         try{
-        BufferedInputStream in = new BufferedInputStream(new FileInputStream(localfile));
+        BufferedInputStream in = new BufferedInputStream(new FileInputStream(localfilepath));
         StringBuffer builder = new StringBuffer();
         int len;
         byte[] bytes = new byte[10240];
@@ -221,7 +235,16 @@ public class KvStoreProcessor implements Processor {
            builder.append(new String(bytes, 0, len));
         }
         System.out.println("builder:"+builder.toString());
-        store = (HashMap<String, Map<String, String>>) JSON.parse(builder.toString());
+//        store = (HashMap<String, Map<String, String>>) JSON.parse(builder.toString());
+//        
+        
+        Gson gson = new Gson();
+		Map<String,Map<String,String>> t = gson.fromJson(builder.toString(), new TypeToken<Map<String,Map<String,String>>>(){}.getType());
+		
+		if(t!=null&&t.size()>0) {
+			putMap2Map(t,store);
+		}
+	
 
   //      save2log("read file from localdisk to store!");
         in.close();
@@ -230,15 +253,50 @@ public class KvStoreProcessor implements Processor {
      //        save2log("load error!");
              e.printStackTrace();
         }
-
     }
+    
+    /*
+     * 获取文件夹下的所有文件
+     */
+    public static List<String> getDiskDirFilePath(String dir) {
+    	List<String> pathList = new ArrayList<>();
+    	File dirFile = new File(dir) ;
+    	if(!dirFile.exists()) {
+    		return null;
+    	}
+    	File[] filelist = dirFile.listFiles();
+    	for(File f:filelist) {
+    		pathList.add(f.getPath());
+    	}
+    	return pathList;
+    }
+   
+    /*
+     * 磁盘所有存放数据的文件都存进store中
+     */
+    public static  void loadfromDiskAllFile2Store(){
+        //首先获取put对应的那个store.txt文件的内容
+    	loadDiskfile2Store(localfilepath);
+    	//然后获取batch_put对应的内容
+    	String dirpath = "";//临时变量，后面需要改为全局变量****************************
+    	List<String> pathList = new ArrayList<>();
+    	pathList =  getDiskDirFilePath(dirpath);
+    	for(String path:pathList) {
+    		loadDiskfile2Store(path);
+    	}
+    }
+    /*
+     * put里面用，将put的所有都存放在store.txt里面
+     */
     public  Boolean savefile2local(String input){
 //        String localfilepath = "";
         try {
+        	
+        	//若本地文件没有产生则创建文件
             if(!localfile.exists()){
                 localfile.createNewFile();
             }
-            BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(localfile), 16);
+            BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(localfile,true), 16);
             String storejson = input;
             out.write(storejson.getBytes());
             out.write("\n".getBytes());
