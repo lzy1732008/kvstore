@@ -10,6 +10,7 @@ import com.google.gson.reflect.TypeToken;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 import hdfsOperation.HdfsOperation;
 import org.apache.avro.data.Json;
+import org.apache.hadoop.util.Time;
 import org.jboss.netty.util.internal.ConcurrentHashMap;
 import org.mortbay.util.ajax.JSON;
 
@@ -25,14 +26,15 @@ import java.util.Map;
  */
 public class KvStoreProcessor implements Processor {
     private static  Map<String, Map<String, String>> store = new HashMap<>();
-    private  static String localfilepath = "/opt/localdisk/store.txt";
-    private static  String localfilename = "store.txt";
-    private static String hdfsurl = KvStoreConfig.getHdfsUrl();
-    private static  String hdfsfiledic = "/kvstore";
-    private static String hdfsfilepath = hdfsurl+hdfsfiledic+"/store.txt";
-    private  static String logpath = "/opt/localdisk/log.txt";
-    private static File localfile =  new File(localfilepath);
-    private static File locallog = new File(logpath);
+//    private  static String localfilepath = "/opt/localdisk/store.txt";
+//    private static  String localfilename = "store.txt";
+    private static  String LOCAL_DIR = "/opt/localdisk"; 
+    private static String HDFS_URL = KvStoreConfig.getHdfsUrl();
+    private static  String HDFS_FILEDIC = "/kvstore";
+//    private static String HDFS_FILEPATH = HDFS_URL+HDFS_FILEDIC+"/store.txt";
+    private  static String LOG_PATH = "/opt/localdisk/log.txt";
+//    private static File LOCAL_FILE =  new File(localfilepath);
+    private static File LOCAL_LOG = new File(LOG_PATH);
 
 
     public KvStoreProcessor(){ }
@@ -137,7 +139,9 @@ public class KvStoreProcessor implements Processor {
             return false;
         }
         //首先json化输入数据
-        String inputformat = String.format("%s%s",key,JSON.toString(value));
+		Map<String,Map<String,String>>  tempmap = new HashMap<String,Map<String,String>>();
+		tempmap.put(key, value);
+        String inputformat = String.format("%s",tempmap.toString());
        
         //将数据放入store中
         store.put(key,value);
@@ -149,7 +153,6 @@ public class KvStoreProcessor implements Processor {
 //        save2hdfs(inputformat);
         return true;
 
-
     }
     @Override
     public synchronized boolean batchPut(Map<String,Map<String,String>> records){
@@ -157,13 +160,13 @@ public class KvStoreProcessor implements Processor {
             return false;
         }
         //首先json化输入数据
-        String inputformat = String.format("%s",JSON.toString(records));      
+        String inputformat = String.format("%s",records.toString());      
         //将数据存入本地文件中
         savefile2local(inputformat);
         //将数据放入store中
         store.putAll(records);
         //将数据写入hdfs中
-        save2hdfs(inputformat);
+   //     save2hdfs(inputformat);
         return true;
     }
 
@@ -200,21 +203,21 @@ public class KvStoreProcessor implements Processor {
     }
 
 
-    public  void loadFromHdfs2Disk(){
-        try {
-            HdfsOperation hdfs = new HdfsOperation();
-            if (localfile.exists()) {
-                localfile.delete();
-                localfile.createNewFile();
-            }
-            hdfs.readFile(hdfsfilepath, localfilepath);
-            save2log("read file from hdfs to localdisk!");
-        }
-        catch(Exception  e){
-            save2log("load error!");
-            e.printStackTrace();
-        }
-    }
+//    public  void loadFromHdfs2Disk(){
+//        try {
+//            HdfsOperation hdfs = new HdfsOperation();
+//            if (localfile.exists()) {
+//                localfile.delete();
+//                localfile.createNewFile();
+//            }
+//            hdfs.readFile(hdfsfilepath, localfilepath);
+//            save2log("read file from hdfs to localdisk!");
+//        }
+//        catch(Exception  e){
+//            save2log("load error!");
+//            e.printStackTrace();
+//        }
+//    }
     public static void putMap2Map(Map<String,Map<String,String>> t1,Map<String,Map<String,String>> t2) {
     	for(String key:t1.keySet()) {
     	   Map<String,String> value = t1.get(key);
@@ -226,33 +229,29 @@ public class KvStoreProcessor implements Processor {
      * 读取一个文件到store
      */   
     public static void loadDiskfile2Store(String localfilepath) {
-        try{
-        BufferedInputStream in = new BufferedInputStream(new FileInputStream(localfilepath));
-        StringBuffer builder = new StringBuffer();
-        int len;
-        byte[] bytes = new byte[10240];
-        while ((len = in.read(bytes)) != -1) {
-           builder.append(new String(bytes, 0, len));
-        }
-        System.out.println("builder:"+builder.toString());
-//        store = (HashMap<String, Map<String, String>>) JSON.parse(builder.toString());
-//        
-        
-        Gson gson = new Gson();
-		Map<String,Map<String,String>> t = gson.fromJson(builder.toString(), new TypeToken<Map<String,Map<String,String>>>(){}.getType());
-		
-		if(t!=null&&t.size()>0) {
-			putMap2Map(t,store);
-		}
-	
-
-  //      save2log("read file from localdisk to store!");
-        in.close();
-        }
-        catch(Exception e){
-     //        save2log("load error!");
-             e.printStackTrace();
-        }
+    	  try{
+    	        BufferedInputStream in = new BufferedInputStream(new FileInputStream(localfilepath));
+    	        StringBuffer builder = new StringBuffer();
+    	        int len;
+    	        byte[] bytes = new byte[10240];
+    	        while ((len = in.read(bytes)) != -1) {
+    	           builder.append(new String(bytes, 0, len));
+    	        }
+//    	        System.out.println("builder:"+builder.toString());
+//    	        
+    	        
+    	        Gson gson = new Gson();
+    			Map<String,Map<String,String>> t = gson.fromJson(builder.toString(), new TypeToken<Map<String,Map<String,String>>>(){}.getType());
+    			if(t!=null&&t.size()>0) {
+    			putMap2Map(t,store);
+    			}
+    	  //      save2log("read file from localdisk to store!");
+    	        in.close();
+    	        }
+    	        catch(Exception e){
+    	     //        save2log("load error!");
+    	             e.printStackTrace();
+    	        }
     }
     
     /*
@@ -276,9 +275,9 @@ public class KvStoreProcessor implements Processor {
      */
     public static  void loadfromDiskAllFile2Store(){
         //首先获取put对应的那个store.txt文件的内容
-    	loadDiskfile2Store(localfilepath);
+    //	loadDiskfile2Store(localfilepath);
     	//然后获取batch_put对应的内容
-    	String dirpath = "";//临时变量，后面需要改为全局变量****************************
+    	String dirpath = LOCAL_DIR;//临时变量，后面需要改为全局变量****************************
     	List<String> pathList = new ArrayList<>();
     	pathList =  getDiskDirFilePath(dirpath);
     	for(String path:pathList) {
@@ -289,51 +288,53 @@ public class KvStoreProcessor implements Processor {
      * put里面用，将put的所有都存放在store.txt里面
      */
     public  Boolean savefile2local(String input){
-//        String localfilepath = "";
-        try {
-        	
-        	//若本地文件没有产生则创建文件
-            if(!localfile.exists()){
-                localfile.createNewFile();
-            }
-            BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(localfile,true), 16);
-            String storejson = input;
-            out.write(storejson.getBytes());
-            out.write("\n".getBytes());
-            save2log("save input to localdisk:".concat(input));
-            return true;
-        }
-        catch(Exception e){
-            save2log("save error!");
-            e.printStackTrace();
+      	String localfilename = LOCAL_DIR+"\\"+Time.now()+Math.random()+".txt";
+    	File file = new File(localfilename);
+    	try {
+         	
+         	//若本地文件没有产生则创建文件
+             if(!file.exists()){
+            	 file.createNewFile();
+             }
+             BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(file), 16);
+             String storejson = input;
+             out.write(storejson.getBytes());
+             out.write("\n".getBytes());
 
-            return false;
-        }
+             out.close();
+             save2log("save input to localdisk:".concat(input));
+             return true;
+         }
+         catch(Exception e){
+             save2log("save error!");
+             e.printStackTrace();
 
+             return false;
+         }
     }
 
-    public  Boolean save2hdfs(String input){
-        HdfsOperation hdfs = new HdfsOperation();
-        try{
-            hdfs.deleteFile(hdfsfilepath);
-            hdfs.copyFromLocal(localfilepath,hdfsurl+hdfsfiledic);
-            save2log("save input to hdfs:".concat(input));
-            return true;
-        }
-        catch (Exception e){
-            save2log("save error!");
-            e.printStackTrace();
-            return false;
-        }
-    }
+//    public  Boolean save2hdfs(String input){
+//        HdfsOperation hdfs = new HdfsOperation();
+//        try{
+//            hdfs.deleteFile(hdfsfilepath);
+//            hdfs.copyFromLocal(localfilepath,hdfsurl+hdfsfiledic);
+//            save2log("save input to hdfs:".concat(input));
+//            return true;
+//        }
+//        catch (Exception e){
+//            save2log("save error!");
+//            e.printStackTrace();
+//            return false;
+//        }
+//    }
 
 
     public Boolean save2log(String input){
         try {
-            if(!locallog.exists()){
-                locallog.createNewFile();
+            if(!LOCAL_LOG.exists()){
+            	LOCAL_LOG.createNewFile();
             }
-            BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(locallog), 16);
+            BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(LOCAL_LOG), 16);
             out.write(input.getBytes());
             out.write("\n".getBytes());
             return true;

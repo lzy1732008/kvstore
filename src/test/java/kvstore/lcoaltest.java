@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.util.Time;
 import org.jboss.netty.util.internal.ConcurrentHashMap;
 import org.mortbay.util.ajax.JSON;
 
@@ -20,10 +21,8 @@ import cn.helium.kvstore.common.KvStoreConfig;
 
 public class lcoaltest {
     private static  Map<String, Map<String, String>> store = new HashMap<>();
-    private  static String localfilepath = "D:\\test\\store.txt";
-    private  static String localdirpath = "D:\\test\\dir";
-    private static  String localfilename = "store.txt";
-    private static File localfile =  new File(localfilepath);
+    private  static String localdirpath = "D:\\test";
+
 
 	public static void main(String args[]) {
 		Map<String,Map<String,String>>  batch_put = new HashMap<String,Map<String,String>>();
@@ -33,36 +32,48 @@ public class lcoaltest {
 			String value2 = i+"B";
 			Map<String,String> map = new HashMap<String,String>();
 			map.put(key, value2);
-		//	store.put(key, map);
-			 String inputformat = String.format("%s%s",key,JSON.toString(map));
-			savefile2local(inputformat);
+			put(key,map);
 		}
 		store = new HashMap<>();
-	    loadfromDiskAllFile2Store();
-	   
-	    for(String key:store.keySet()) {
-	    	Map<String, String> value = store.get(key);
-	    	System.out.println(key+":"+value);
-	    }
-		System.out.println(store.size());
-		
-		
-		
-		
-//		loadfromDisk2Store();
-//		System.out.println(store.containsKey("1"));
-		
-		
-		
+		for(int i=10;i<20;i++) {
+			String key = i+"";
+			String key1 = "name"+i;
+			String value2 = i+"B";
+			Map<String,String> map = new HashMap<String,String>();
+			map.put(key, value2);
+			store.put(key, map);
+			
+		}
+		batchPut(store);	
+	    loadfromDiskAllFile2Store();	    
+	    
+			
 	}
 	
+    public synchronized static boolean batchPut(Map<String,Map<String,String>> records){
+        if(records == null){
+            return false;
+        }
+        //首先json化输入数据
+        String inputformat = String.format("%s",records.toString());      
+        //将数据存入本地文件中
+        savefile2local(inputformat);
+        //将数据放入store中
+        store.putAll(records);
+        //将数据写入hdfs中
+   //     save2hdfs(inputformat);
+        return true;
+    }
+	
 
-    public synchronized boolean put(String key,Map<String,String> value){
+    public synchronized static boolean put(String key,Map<String,String> value){
 		if(value == null||key == null){
             return false;
         }
         //首先json化输入数据
-        String inputformat = String.format("%s%s",key,JSON.toString(value));
+		Map<String,Map<String,String>>  tempmap = new HashMap<String,Map<String,String>>();
+		tempmap.put(key, value);
+        String inputformat = String.format("%s",tempmap.toString());
        
         //将数据放入store中
         store.put(key,value);
@@ -79,16 +90,21 @@ public class lcoaltest {
 	
 	
     public static  Boolean savefile2local(String input){
-    	 try {
+
+    	String localfilename = localdirpath+"\\"+Time.now()+".txt";
+    	File file = new File(localfilename);
+    	try {
          	
          	//若本地文件没有产生则创建文件
-             if(!localfile.exists()){
-                 localfile.createNewFile();
+             if(!file.exists()){
+            	 file.createNewFile();
              }
-             BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(localfile,true), 16);
+             BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(file), 16);
              String storejson = input;
              out.write(storejson.getBytes());
              out.write("\n".getBytes());
+
+             out.close();
    //          save2log("save input to localdisk:".concat(input));
              return true;
          }
@@ -156,7 +172,7 @@ public class lcoaltest {
      */
     public static  void loadfromDiskAllFile2Store(){
         //首先获取put对应的那个store.txt文件的内容
-    	loadDiskfile2Store(localfilepath);
+    	//loadDiskfile2Store(localfilepath);
     	//然后获取batch_put对应的内容
     	String dirpath =localdirpath;//临时变量，后面需要改为全局变量****************************
     	List<String> pathList = new ArrayList<>();
