@@ -71,18 +71,20 @@ public class KvStoreProcessor implements Processor {
                     	*/
                     	int kvPodId = RpcServer.getRpcServerId();
                     	int kvPodNum = KvStoreConfig.getServersNum();
-                    	for(int i = 0;i < kvPodNum; i++) {
-                    		if(i!=kvPodId) {//不是当前kvPod
+                    	for(int id = 0;id < kvPodNum; id++) {
+                    		if(id!=kvPodId) {//不是当前kvPod
                     			//发送消息
                     			try {
 									byte[] queryres = new byte[10240]; //存放查询结果
-									queryres = RpcClientFactory.inform(i,keyformat.getBytes());
+									queryres = RpcClientFactory.inform(id,keyformat.getBytes());
 									if(queryres!=null) {//其他节点查询有结果
 										ByteArrayInputStream byteIn = new ByteArrayInputStream(queryres);
 										ObjectInputStream in = null;
 										try {
 						                    in = new ObjectInputStream(byteIn);
-						                    return (Map<String, String>) in.readObject(); //返回查询结果
+						                    Map<String, String> resultvalue = (Map<String, String>) in.readObject(); 
+						                    in.close();
+						                    return resultvalue;//返回查询结果
 						                } catch (IOException e) {
 						                    e.printStackTrace();
 						                } catch (ClassNotFoundException e) {
@@ -174,7 +176,7 @@ public class KvStoreProcessor implements Processor {
     public byte[] process(byte[] input){
     	//接受其他kvpod发来请求key的消息并处理返回value
         String mykey = new String(input);
-        Map<String, String> replymap = this.store.get(mykey);
+        Map<String, String> replymap = store.get(mykey);
         //如果没有找到相关的key，返回一个空的数组
         if (replymap == null)
             return null;
@@ -237,8 +239,8 @@ public class KvStoreProcessor implements Processor {
     	        while ((len = in.read(bytes)) != -1) {
     	           builder.append(new String(bytes, 0, len));
     	        }
-//    	        System.out.println("builder:"+builder.toString());
-//    	        
+
+    	        
     	        
     	        Gson gson = new Gson();
     			Map<String,Map<String,String>> t = gson.fromJson(builder.toString(), new TypeToken<Map<String,Map<String,String>>>(){}.getType());
@@ -264,8 +266,10 @@ public class KvStoreProcessor implements Processor {
     		return null;
     	}
     	File[] filelist = dirFile.listFiles();
+    	if(filelist!=null) {
     	for(File f:filelist) {
     		pathList.add(f.getPath());
+    	}
     	}
     	return pathList;
     }
@@ -280,15 +284,17 @@ public class KvStoreProcessor implements Processor {
     	String dirpath = LOCAL_DIR;//临时变量，后面需要改为全局变量****************************
     	List<String> pathList = new ArrayList<>();
     	pathList =  getDiskDirFilePath(dirpath);
+    	if(pathList!=null) {
     	for(String path:pathList) {
     		loadDiskfile2Store(path);
+    	}
     	}
     }
     /*
      * put里面用，将put的所有都存放在store.txt里面
      */
     public  Boolean savefile2local(String input){
-      	String localfilename = LOCAL_DIR+"\\"+Time.now()+Math.random()+".txt";
+      	String localfilename = LOCAL_DIR+"/"+Time.now()+Math.random()+".txt";
     	File file = new File(localfilename);
     	try {
          	
@@ -344,5 +350,10 @@ public class KvStoreProcessor implements Processor {
             return false;
         }
     }
+    
+
+    
+    
+    
 
 }
