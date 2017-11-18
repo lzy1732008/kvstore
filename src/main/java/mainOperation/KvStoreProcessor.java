@@ -9,10 +9,10 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.sun.org.apache.xpath.internal.operations.Bool;
 import hdfsOperation.HdfsOperation;
-import org.apache.avro.data.Json;
+//import org.apache.avro.data.Json;
 import org.apache.hadoop.util.Time;
-import org.jboss.netty.util.internal.ConcurrentHashMap;
-import org.mortbay.util.ajax.JSON;
+//import org.jboss.netty.util.internal.ConcurrentHashMap;
+//import org.mortbay.util.ajax.JSON;
 
 
 import java.io.*;
@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 /**
  * Created by Dell on 2017/11/7.
@@ -28,6 +29,8 @@ public class KvStoreProcessor implements Processor {
     private static  Map<String, Map<String, String>> store = new HashMap<>();
 //    private  static String localfilepath = "/opt/localdisk/store.txt";
 //    private static  String localfilename = "store.txt";
+    
+    private static String LOCAL_CACHE_NAME = "cache.txt";
     private static  String LOCAL_DIR = "/opt/localdisk"; 
     private static String HDFS_URL = KvStoreConfig.getHdfsUrl();
     private static  String HDFS_FILEDIC = "/kvstore";
@@ -35,9 +38,56 @@ public class KvStoreProcessor implements Processor {
     private  static String LOG_PATH = "/opt/localdisk/log.txt";
 //    private static File LOCAL_FILE =  new File(localfilepath);
     private static File LOCAL_LOG = new File(LOG_PATH);
+    private static File LOCAL_CACHE = new File(LOCAL_DIR+"/"+LOCAL_CACHE_NAME);
+	private static HdfsOperation op = new HdfsOperation();
 
 
-    public KvStoreProcessor(){ }
+    public KvStoreProcessor(){
+    
+    	if(op.mkdirFile(HDFS_FILEDIC+"/mod0")) {
+    	op.createFile(HDFS_FILEDIC+"/mod0"+"/store.txt");
+    	op.writeFile(HDFS_FILEDIC+"/mod0"+"/store.txt","{}");
+    	}
+    	if(op.mkdirFile(HDFS_FILEDIC+"/mod1")) {
+        	op.createFile(HDFS_FILEDIC+"/mod1"+"/store.txt");
+        	op.writeFile(HDFS_FILEDIC+"/mod1"+"/store.txt","{}");
+        }
+    	if(op.mkdirFile(HDFS_FILEDIC+"/mod2")) {
+        	op.createFile(HDFS_FILEDIC+"/mod2"+"/store.txt");
+        	op.writeFile(HDFS_FILEDIC+"/mod2"+"/store.txt","{}");
+        }
+    	if(op.mkdirFile(HDFS_FILEDIC+"/mod3")) {
+        	op.createFile(HDFS_FILEDIC+"/mod3"+"/store.txt");
+        	op.writeFile(HDFS_FILEDIC+"/mod3"+"/store.txt","{}");
+        }
+    	if(op.mkdirFile(HDFS_FILEDIC+"/mod4")) {
+        	op.createFile(HDFS_FILEDIC+"/mod4"+"/store.txt");
+        	op.writeFile(HDFS_FILEDIC+"/mod4"+"/store.txt","{}");
+        }
+    	writeDataToHdfs writetohdfs = new writeDataToHdfs();
+    	new Thread(writetohdfs).start();  	
+    	
+    }
+    public class writeDataToHdfs implements Runnable {  
+        public void run() {  
+            try {
+            	Thread.sleep(60);
+            }catch(Exception e) {
+            	e.printStackTrace();
+            }
+            //将内存数据写入hdfs
+            //此方法待写****************
+            for(Entry<String, Map<String, String>> entry:store.entrySet()) {
+            	String key = entry.getKey();
+            	int keymod = Math.floorMod(Integer.parseInt(key), 5);
+            	Map<String,String> value = entry.getValue();
+           	    String content = ","+key+"="+"{"+value.toString()+"}";
+            	op.writeFile(HDFS_FILEDIC+"/mod"+keymod+"/store.txt",content);
+            }
+            store = new HashMap<>();
+        }  
+    }  
+    
     @Override
     public Map<String,String> get(String key){
         if(key==null){
@@ -109,14 +159,38 @@ public class KvStoreProcessor implements Processor {
 //                            save2log("cannot find the key!");
 //                            return null;
 //                        }
-                   	return null; //此中hdfs尚未写完整，所以先返回一个null
-                    
+                    int keymod = Math.floorMod(Integer.parseInt(key), 5);
+                    Map<String,Map<String,String>> temp = new HashMap<String,Map<String,String>>();
+                    temp = op.readFileToStore(HDFS_FILEDIC+"/mod"+keymod+"/store.txt");
+                    putMap2Map(temp,store);
+                    if(store.containsKey(keyformat)) {
+                    	try {
+							writeQueryTolocal(key,store.get(keyformat));
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+                        return store.get(keyformat);	
+                    }
+                    return null;                  
                     }
                     else { //当前Kvpod上存在key
+                    	try {
+							writeQueryTolocal(key,store.get(keyformat));
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
                     return store.get(keyformat);
                     }
                 }
                 else { //当前内存中有key
+                	try {
+						writeQueryTolocal(key,store.get(keyformat));
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
                 return store.get(keyformat);
                 }
             }
@@ -134,6 +208,60 @@ public class KvStoreProcessor implements Processor {
         }
 
     }
+    
+    
+    /*
+     * 将查询结果存储到临时表中
+     */
+    
+    public static void localCacheInit() throws IOException {
+    	if(!LOCAL_CACHE.exists()) {
+    	    LOCAL_CACHE.createNewFile();
+    	}
+    	BufferedWriter buffer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(LOCAL_DIR.concat("/").concat(LOCAL_CACHE_NAME))));
+    	try {
+    		buffer.write("{}");
+    	}catch(Exception e) {
+    		e.printStackTrace();
+    	}
+    	finally {
+    		  try {     
+                  if(buffer != null){  
+                      buffer.close();     
+                  }  
+              } catch (IOException e) {     
+                  e.printStackTrace();     
+              }  		
+    	}  	
+    }
+    public static void writeQueryTolocal(String key,Map<String,String> value) throws IOException {
+    	if(key == null || value == null) {
+    		return;
+    	}
+    	if(!LOCAL_CACHE.exists()) {
+    	    LOCAL_CACHE.createNewFile();
+    	}
+    	 RandomAccessFile randomFile = null;  
+    	 try {
+    		 randomFile  = new RandomAccessFile(LOCAL_DIR.concat("/").concat(LOCAL_CACHE_NAME),"rw");
+    		 Long fileLength = randomFile.length();
+    		 String content = ","+key+"="+"{"+value.toString()+"}";
+    		 if(fileLength>=0) {
+    	            randomFile.seek(fileLength-1);     
+    	            randomFile.writeBytes(content);  
+    	            }
+    	        } catch (IOException e) {     
+    	            e.printStackTrace();     
+    	        } finally{  
+    	            if(randomFile != null){  
+    	                try {  
+    	                    randomFile.close();  
+    	                } catch (IOException e) {  
+    	                    e.printStackTrace();  
+    	                }  
+    	            }  
+    	        }  
+    }
   
 	@Override
     public synchronized boolean put(String key,Map<String,String> value){
@@ -149,7 +277,7 @@ public class KvStoreProcessor implements Processor {
         store.put(key,value);
         
         //将数据存入本地文件中
-        savefile2local(inputformat);
+ //     savefile2local(inputformat);
         
         //将数据写入hdfs中
 //        save2hdfs(inputformat);
@@ -163,10 +291,13 @@ public class KvStoreProcessor implements Processor {
         }
         //首先json化输入数据
         String inputformat = String.format("%s",records.toString());      
-        //将数据存入本地文件中
-        savefile2local(inputformat);
+       
         //将数据放入store中
         store.putAll(records);
+        
+        //将数据存入本地文件中
+//        savefile2local(inputformat);
+       
         //将数据写入hdfs中
    //     save2hdfs(inputformat);
         return true;

@@ -5,10 +5,15 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.IOUtils;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 import cn.helium.kvstore.common.KvStoreConfig;
 
 import java.io.*;
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 /**
  * Created by Dell on 2017/11/8.
  */
@@ -70,6 +75,35 @@ public class HdfsOperation {
           new RuntimeException(e);
       }
   }
+  public  Map<String,Map<String,String>> readFileToStore(String file) {
+	  Configuration conf = new Configuration();
+      conf.set("fs.hdfs.impl","org.apache.hadoop.hdfs.DistributedFileSystem");
+      FileSystem fs;
+      try {
+          fs= FileSystem.get(URI.create(file),conf);
+          Path path = new Path(file);
+          if(!fs.exists(path)){
+              return null;
+          }
+          FSDataInputStream in = fs.open(path);
+          BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+          String line;
+  		  Map<String,Map<String,String>> mapList = new HashMap<String,Map<String,String>>();
+  		  while((line=reader.readLine())!=null) {
+  			Gson gson = new Gson();
+  			mapList.putAll((Map<? extends String, ? extends Map<String, String>>) gson.fromJson(line, new TypeToken<Map<String,Map<String,String>>>(){}.getType()));
+  		}
+  		  reader.close();
+  		  in.close();
+          fs.close();
+          return mapList;
+      }catch (IOException e) {
+//          LOG.error("ifExists fs Exception caught! :" , e);
+          new RuntimeException(e);
+      }
+      return null;
+  }
+  
   public void copyFromLocal (String source, String dest) {
 
       Configuration conf = new Configuration();
@@ -139,7 +173,7 @@ public class HdfsOperation {
   /*
    * 创建新文件夹
    */
-  public void mkdirFile(String dir) {
+  public Boolean mkdirFile(String dir) {
   	Configuration conf = new Configuration();
       conf.set("fs.hdfs.impl","org.apache.hadoop.hdfs.DistributedFileSystem");
       FileSystem fs;
@@ -147,10 +181,12 @@ public class HdfsOperation {
           fs= FileSystem.get(URI.create(dir),conf);
           fs.mkdirs(new Path(dir));
           fs.close();
+          return true;
       }catch (IOException e) {
 //           LOG.error("deleteFile Exception caught! :" , e);
           new RuntimeException(e);
       }
+      return false;
   }
   /*
    * 创建新文件
@@ -163,6 +199,27 @@ public class HdfsOperation {
           fs= FileSystem.get(URI.create(file),conf);
           fs.create(new Path(file));
           fs.close();
+      }catch (IOException e) {
+//           LOG.error("deleteFile Exception caught! :" , e);
+          new RuntimeException(e);
+      }
+  }
+  public void writeFile(String file,String content) {
+	  Configuration conf = new Configuration();
+      conf.set("fs.hdfs.impl","org.apache.hadoop.hdfs.DistributedFileSystem");
+      FileSystem fs;
+      try {
+          fs= FileSystem.get(URI.create(file),conf);
+          Path path = new Path(file);
+          if(!fs.exists(path)) {
+        	 fs.createNewFile(path);
+          }
+          FSDataOutputStream os = fs.append(path);
+          os.write(content.getBytes());
+          os.flush();
+          os.close();
+          
+          
       }catch (IOException e) {
 //           LOG.error("deleteFile Exception caught! :" , e);
           new RuntimeException(e);
