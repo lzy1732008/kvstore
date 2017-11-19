@@ -40,7 +40,7 @@ public class KvStoreProcessor implements Processor {
     private static File LOCAL_LOG = new File(LOG_PATH);
     private static File LOCAL_CACHE = new File(LOCAL_DIR+"/"+LOCAL_CACHE_NAME);
 	private static HdfsOperation op = new HdfsOperation();
-
+    
 
     public KvStoreProcessor(){
     
@@ -77,7 +77,9 @@ public class KvStoreProcessor implements Processor {
             }
             //将内存数据写入hdfs
             //此方法待写****************
-            for(Entry<String, Map<String, String>> entry:store.entrySet()) {
+            Map<String,Map<String,String>> temp = new HashMap<>();
+            putMap2Map(store,temp);
+            for(Entry<String, Map<String, String>> entry:temp.entrySet()) {
             	String key = entry.getKey();
             	int keymod = Math.floorMod(Integer.parseInt(key), 5);
             	Map<String,String> value = entry.getValue();
